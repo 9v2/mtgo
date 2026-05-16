@@ -107,6 +107,32 @@ func TestPyrogramRoundTrip(t *testing.T) {
 	assertAuthKeyEqual(t, orig.AuthKey, decoded.AuthKey)
 }
 
+func TestPyrogramConvertsToTelethonWithDefaultEndpoint(t *testing.T) {
+	orig := makeTestData()
+	orig.ServerAddress = ""
+	orig.Port = 0
+
+	pyro, err := EncodePyrogram(orig)
+	if err != nil {
+		t.Fatalf("encode pyrogram: %v", err)
+	}
+	telethon, err := Pyrogram(pyro)
+	if err != nil {
+		t.Fatalf("pyrogram helper: %v", err)
+	}
+	decoded, err := DecodeTelethon(telethon)
+	if err != nil {
+		t.Fatalf("decode telethon: %v", err)
+	}
+	if decoded.ServerAddress == "" {
+		t.Fatal("expected default server address")
+	}
+	if decoded.Port == 0 {
+		t.Fatal("expected default port")
+	}
+	assertAuthKeyEqual(t, orig.AuthKey, decoded.AuthKey)
+}
+
 // --- GramJS ---
 
 func TestGramjsRoundTrip(t *testing.T) {

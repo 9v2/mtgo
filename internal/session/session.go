@@ -373,9 +373,8 @@ func (s *Session) Invoke(query tg.TLObject, retries int, timeout time.Duration) 
 			continue
 		}
 
-		if rpcErr, ok := obj.(*tg.RPCError); ok {
-			lastErr = fmt.Errorf("rpc error code %d: %s", rpcErr.ErrorCode, rpcErr.ErrorMessage)
-			continue
+		if _, ok := obj.(*tg.RPCError); ok {
+			return obj, nil
 		}
 
 		return obj, nil

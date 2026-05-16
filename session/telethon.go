@@ -17,7 +17,11 @@ func EncodeTelethon(data *SessionData) (string, error) {
 		return "", fmt.Errorf("auth_key must be 256 bytes, got %d", len(data.AuthKey))
 	}
 
-	ip := net.ParseIP(data.ServerAddress)
+	serverAddress := data.ServerAddress
+	if serverAddress == "" {
+		serverAddress = defaultServerAddress(data.DCID, data.TestMode)
+	}
+	ip := net.ParseIP(serverAddress)
 	if ip == nil {
 		return "", fmt.Errorf("invalid IP address: %s", data.ServerAddress)
 	}
@@ -34,7 +38,11 @@ func EncodeTelethon(data *SessionData) (string, error) {
 	buf = append(buf, byte(data.DCID))
 	buf = append(buf, ipBytes...)
 	portBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(portBytes, uint16(data.Port))
+	port := data.Port
+	if port == 0 {
+		port = defaultPort(data.TestMode)
+	}
+	binary.BigEndian.PutUint16(portBytes, uint16(port))
 	buf = append(buf, portBytes...)
 	buf = append(buf, data.AuthKey...)
 
