@@ -37,6 +37,9 @@ func (ci *clientInvoker) RPCInvoke(ctx context.Context, input tg.TLObject, decod
 
 	query := input
 	if !apiInit && needsInitConnection(input) {
+		if err := ci.client.requireAPIID(); err != nil {
+			return nil, err
+		}
 		query = wrapInitConnection(cfg, input)
 	}
 

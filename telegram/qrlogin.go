@@ -42,6 +42,9 @@ func (c *Client) GetQRCodeLoginToken(ctx context.Context) (*QRLoginToken, error)
 	if err := c.ensureConnected(); err != nil {
 		return nil, err
 	}
+	if err := c.requireAPICredentials(); err != nil {
+		return nil, err
+	}
 
 	c.Log.Debug("auth: requesting QR login token")
 	rpc := c.Raw()

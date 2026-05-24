@@ -140,10 +140,11 @@ type Client struct {
 //	}
 //	defer client.Disconnect()
 func NewClient(apiID int32, apiHash string, cfg *Config) (*Client, error) {
-	if apiID == 0 {
+	allowSessionBacked := cfg != nil && (cfg.SessionString != "" || cfg.Storage != nil || cfg.SessionName != "")
+	if apiID == 0 && !allowSessionBacked {
 		return nil, ErrAPIIDRequired
 	}
-	if apiHash == "" {
+	if apiHash == "" && !allowSessionBacked {
 		return nil, ErrAPIHashRequired
 	}
 
@@ -427,6 +428,23 @@ func (c *Client) healthConfig() healthCheckConfig {
 		cfg.PongTimeout = c.cfg.HealthPongTimeout
 	}
 	return cfg
+}
+
+func (c *Client) requireAPIID() error {
+	if c.cfg.APIID == 0 {
+		return ErrAPIIDRequired
+	}
+	return nil
+}
+
+func (c *Client) requireAPICredentials() error {
+	if err := c.requireAPIID(); err != nil {
+		return err
+	}
+	if c.cfg.APIHash == "" {
+		return ErrAPIHashRequired
+	}
+	return nil
 }
 
 // IsConnected reports whether the client has an active connection to Telegram.
@@ -892,6 +910,29 @@ func (c *Client) connectTransport(timeout time.Duration) error {
 		if key, _ := src.AuthKey(); len(key) > 0 {
 			_ = st.SetAuthKey(key)
 		}
+		if apiID, _ := src.APIID(); apiID > 0 {
+			_ = st.SetAPIID(apiID)
+		}
+		if testMode, _ := src.TestMode(); testMode {
+			_ = st.SetTestMode(testMode)
+		}
+		if userID, _ := src.UserID(); userID != 0 {
+			_ = st.SetUserID(userID)
+		}
+		if isBot, _ := src.IsBot(); isBot {
+			_ = st.SetIsBot(isBot)
+		}
+	}
+
+	if c.cfg.APIID == 0 {
+		if apiID, err := st.APIID(); err == nil && apiID > 0 {
+			c.cfg.APIID = apiID
+		}
+	}
+	if c.cfg.APIHash == "" {
+		if apiHash, err := st.APIHash(); err == nil && apiHash != "" {
+			c.cfg.APIHash = apiHash
+		}
 	}
 
 	c.loadPeersFromStorage()
@@ -993,11 +1034,15 @@ func (c *Client) connectTransport(timeout time.Duration) error {
 		if err := st.SetAuthKey(result.AuthKey); err != nil {
 			return fmt.Errorf("save auth key: %w", err)
 		}
-		if err := st.SetAPIID(c.cfg.APIID); err != nil {
-			c.Log.Warnf("save api_id: %v", err)
+		if c.cfg.APIID != 0 {
+			if err := st.SetAPIID(c.cfg.APIID); err != nil {
+				c.Log.Warnf("save api_id: %v", err)
+			}
 		}
-		if err := st.SetAPIHash(c.cfg.APIHash); err != nil {
-			c.Log.Warnf("save api_hash: %v", err)
+		if c.cfg.APIHash != "" {
+			if err := st.SetAPIHash(c.cfg.APIHash); err != nil {
+				c.Log.Warnf("save api_hash: %v", err)
+			}
 		}
 		if err := st.SetServerAddress(dc.Address()); err != nil {
 			c.Log.Warnf("save server address: %v", err)
@@ -1058,6 +1103,10 @@ func (c *Client) connectTransport(timeout time.Duration) error {
 		}
 
 		if !alreadyAuthorized {
+			if err := c.requireAPICredentials(); err != nil {
+				c.cleanupSessions()
+				return fmt.Errorf("bot auth: %w", err)
+			}
 			c.Log.Info("importing bot authorization")
 			rpc := c.Raw()
 			authResult, err := rpc.AuthImportBotAuthorization(context.Background(), &tg.AuthImportBotAuthorizationRequest{

@@ -59,6 +59,9 @@ type SendCodeResult struct {
 //	}
 //	fmt.Println("phone code hash:", result.PhoneCodeHash)
 func (c *Client) SendCode(ctx context.Context, phoneNumber string) (*SendCodeResult, error) {
+	if err := c.requireAPICredentials(); err != nil {
+		return nil, err
+	}
 	c.Log.Debug("auth: SendCode")
 	rpc := c.Raw()
 	result, err := rpc.AuthSendCode(ctx, &tg.AuthSendCodeRequest{

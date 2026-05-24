@@ -10,6 +10,7 @@ import (
 
 	"github.com/mtgo-labs/mtgo/internal/session"
 	"github.com/mtgo-labs/mtgo/internal/transport"
+	sessions "github.com/mtgo-labs/mtgo/session"
 	"github.com/mtgo-labs/mtgo/telegram/types"
 	"github.com/mtgo-labs/mtgo/tg"
 	"github.com/mtgo-labs/storage"
@@ -445,6 +446,55 @@ func TestConnectWithInMemoryStorage(t *testing.T) {
 	}
 
 	c.Disconnect()
+}
+
+func TestNewClientAllowsSessionStringWithoutAPICredentials(t *testing.T) {
+	data := &sessions.SessionData{
+		DCID:          2,
+		ServerAddress: "149.154.167.50",
+		Port:          443,
+		AuthKey:       make([]byte, 256),
+		AppID:         16623,
+		UserID:        8782003652,
+	}
+	sessionString, err := sessions.EncodePyrogram(data)
+	if err != nil {
+		t.Fatalf("EncodePyrogram() = %v", err)
+	}
+
+	c, err := NewClient(0, "", &Config{
+		SessionString: sessionString,
+		InMemory:      true,
+		SessionName:   "session-only",
+		NoUpdates:     true,
+	})
+	if err != nil {
+		t.Fatalf("NewClient() = %v", err)
+	}
+
+	st := NewMemoryStorage()
+	c.setTestStorage(st)
+
+	srv, err := newTestServer(nil)
+	if err != nil {
+		t.Fatalf("newTestServer() = %v", err)
+	}
+	defer srv.Close()
+	srv.authKey = data.AuthKey
+	c.cfg.TransportMode = TransportModeIntermediate
+	c.setTestDialer(transport.Dialer(&testServerDialer{addr: srv.Addr()}))
+
+	if err := c.Connect(5 * time.Second); err != nil {
+		t.Fatalf("Connect() = %v", err)
+	}
+	defer c.Disconnect()
+
+	if got := c.APIID(); got != data.AppID {
+		t.Fatalf("APIID() = %d, want %d", got, data.AppID)
+	}
+	if got, _ := st.APIID(); got != data.AppID {
+		t.Fatalf("storage APIID = %d, want %d", got, data.AppID)
+	}
 }
 
 func TestHandleUpdatesDroppedWhenNoDispatcher(t *testing.T) {
